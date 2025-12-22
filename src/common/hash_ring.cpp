@@ -25,6 +25,7 @@ void ConsistentHashRing::removeNode(const std::string& node_address) {
     }
 }
 
+// --- ENSURE THIS FUNCTION IS PRESENT ---
 std::string ConsistentHashRing::getNode(const std::string& key) {
     if (ring.empty()) return "";
     size_t hash = hash_key(key);
