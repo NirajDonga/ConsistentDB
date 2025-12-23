@@ -2,7 +2,7 @@
 #include <functional>
 #include <iostream>
 #include <string>
-#include <iterator> // Required for std::prev
+#include <iterator>
 
 ConsistentHashRing::ConsistentHashRing(int v_nodes) : virtual_nodes(v_nodes) {}
 
@@ -34,32 +34,27 @@ std::string ConsistentHashRing::getNode(const std::string& key) {
     return it->second;
 }
 
+// --- OPTIMIZATION LOGIC ---
 std::vector<MigrationTask> ConsistentHashRing::getRebalancingTasks(const std::string& new_node) {
     std::vector<MigrationTask> tasks;
     if (ring.empty()) return tasks;
 
-    // Iterate through the ring to find every virtual node belonging to 'new_node'
     for (auto it = ring.begin(); it != ring.end(); ++it) {
         if (it->second == new_node) {
-            // Found a virtual node for the new server.
-            // The range it owns is (Previous_Hash, Current_Hash].
-
             size_t end_hash = it->first;
             size_t start_hash;
 
-            // FIX: Handle wrap-around explicitly without mixing iterator types
+            // Handle wrap-around safely
             if (it == ring.begin()) {
-                start_hash = ring.rbegin()->first; // Wrap around to the last element
+                start_hash = ring.rbegin()->first;
             } else {
-                start_hash = std::prev(it)->first; // Previous element
+                start_hash = std::prev(it)->first;
             }
 
-            // The "Victim" (who held this before) is the NEXT node in the ring.
             auto next_it = std::next(it);
             if (next_it == ring.end()) next_it = ring.begin();
             std::string victim = next_it->second;
 
-            // If the victim is myself, no migration needed (happens if I'm the only node)
             if (victim != new_node) {
                 tasks.push_back({victim, start_hash, end_hash});
             }

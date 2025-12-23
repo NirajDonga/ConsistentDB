@@ -3,6 +3,7 @@
 #include <map>
 #include <vector>
 
+// Structure to define a chunk of data to move
 struct MigrationTask {
     std::string source_node; // The "Victim" we steal from
     size_t start_hash;       // Range Start (exclusive)

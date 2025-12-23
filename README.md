@@ -1,99 +1,39 @@
-# Distributed Key-Value Store (C++)
 
-A high-performance distributed key-value store implemented in C++. It features **Consistent Hashing** for data sharding and efficient load balancing across multiple storage nodes.
+Markdown
 
-## 🏗 Architecture
+# Distributed Key-Value Store
 
-*   **Sharding**: Data is automatically partitioned across available nodes using a **Consistent Hash Ring**.
-*   **Virtual Nodes**: Implements virtual nodes to ensure even data distribution.
-*   **Networking**: Uses HTTP for communication between the Coordinator (Client) and Storage Nodes.
+This is a C++ project demonstrating **Consistent Hashing** with automatic data migration and dynamic scaling.
 
-## 🛠 Prerequisites
+## Getting Started
 
-*   **OS**: Windows (tested), Linux, or macOS.
-*   **Compiler**: C++17 compatible compiler (MinGW, MSVC, or GCC).
-*   **Build System**: CMake (Version 3.10+).
+First, build the project using CMake:
 
-## 🚀 Build Instructions
-
-Open your terminal in the project root.
-
-Create a build directory and compile the project:
-
-```powershell
-mkdir build
-cd build
+```bash
+mkdir build && cd build
 cmake ..
-cmake --build . --target All
-```
+cmake --build .
+Next, start your servers (in separate terminals):
 
-(Note: If using CLion, you can simply click "Build Project" from the top menu).
+Bash
 
-## ⚡ How to Run the Cluster
+# Terminal 1
+./kv_server 8080
 
-To simulate a distributed system on one machine, we will run 3 separate server instances on different ports. You need **4 separate Terminal tabs**.
+# Terminal 2
+./kv_server 8081
+Finally, run the client application:
 
-### Step 1: Start the Storage Nodes (Shards)
+Bash
 
-**Terminal Tab 1 (Node A - Port 8081)**
+./kv_client
+Usage
+Once the client is running, you can interact with the cluster:
 
-```powershell
-cd cmake-build-debug; .\kv_server.exe 8081
-```
+ADD 127.0.0.1:8081 - Add a server and trigger optimized rebalancing.
 
-**Terminal Tab 2 (Node B - Port 8082)**
+REMOVE 127.0.0.1:8080 - Remove a server and evacuate data.
 
-```powershell
-cd cmake-build-debug; .\kv_server.exe 8082
-```
+SET <key> <val> - Store a value.
 
-**Terminal Tab 3 (Node C - Port 8083)**
-
-```powershell
-cd cmake-build-debug; .\kv_server.exe 8083
-```
-
-You should see "Starting Node on Port XXXX..." in each tab.
-
-### Step 2: Start the Client (Coordinator)
-
-**Terminal Tab 4**
-
-```powershell
-cd cmake-build-debug; .\kv_client.exe
-```
-
-## 🎮 Usage Guide
-
-Once the client is running, you can interact with your cluster using the following commands:
-
-### Write Data (SET)
-
-Syntax: `SET <key> <value>`
-
-```plaintext
-> SET username Alice
-[OK] Stored 'username' on Node 8082
-```
-
-### Read Data (GET)
-
-Syntax: `GET <key>`
-
-```plaintext
-> GET username
-[FOUND] Node 8082 returned: Alice
-```
-
-### Exit
-
-```plaintext
-> EXIT
-```
-
-## 🔍 How it Works (Under the Hood)
-
-1.  **Hashing**: When you type `SET user1 Bob`, the client calculates `Hash("user1")`.
-2.  **Routing**: The Consistent Hash Ring determines which node owns that hash (e.g., Node 8083).
-3.  **Request**: The client sends an HTTP POST request directly to `localhost:8083`.
-4.  **Storage**: Node 8083 saves the data in its local memory (sharded storage).
+GET <key> - Retrieve a value.
