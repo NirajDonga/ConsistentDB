@@ -38,9 +38,18 @@ size_t fnv1a_hash(const std::string& key) {
 }
 
 // 3. Ring Range Check
+// [Replace the existing in_range function with this]
 bool in_range(size_t h, size_t start, size_t end) {
-    if (start < end) return h > start && h <= end;
-    return h > start || h <= end; // Handles Wrap-Around
+    // CRITICAL FIX: If start == end, the range is empty. Return false immediately.
+    // This prevents the "Move All" bug.
+    if (start == end) return false;
+
+    if (start < end) {
+        return h > start && h <= end;
+    } else {
+        // Wrap-around case
+        return h > start || h <= end;
+    }
 }
 
 // --- PERSISTENCE HELPERS ---
