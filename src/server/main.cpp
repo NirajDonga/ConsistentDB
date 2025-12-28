@@ -18,13 +18,30 @@ mutex shard_mutexes[NUM_SHARDS];
 ofstream wal_file;
 mutex wal_mutex;
 
+// --- HASHING HELPERS ---
+
+// 1. Internal Sharding Hash (Keeps local locking fast)
 size_t get_shard_id(const string& key) {
     return hash<string>{}(key) % NUM_SHARDS;
 }
 
+// 2. FNV-1a Hash (MUST match the Proxy's algorithm for rebalancing)
+// *** ADD THIS FUNCTION ***
+size_t fnv1a_hash(const std::string& key) {
+    const size_t FNV_prime = 1099511628211u;
+    const size_t offset_basis = 14695981039346656037u;
+    size_t hash = offset_basis;
+    for (char c : key) {
+        hash ^= static_cast<size_t>(c);
+        hash *= FNV_prime;
+    }
+    return hash;
+}
+
+// 3. Ring Range Check
 bool in_range(size_t h, size_t start, size_t end) {
     if (start < end) return h > start && h <= end;
-    return h > start || h <= end;
+    return h > start || h <= end; // Handles Wrap-Around (e.g., 900 to 100)
 }
 
 // --- PERSISTENCE HELPERS ---
@@ -64,7 +81,7 @@ int main(int argc, char* argv[]) {
     std::cout.setf(std::ios::unitbuf);
     httplib::Server svr;
 
-    // 2. WRITE (Update Map + Log to Disk)
+    // 2. WRITE
     svr.Post("/put", [](const httplib::Request& req, httplib::Response& res) {
         string key = req.get_param_value("key");
         string val = req.get_param_value("val");
@@ -77,7 +94,7 @@ int main(int argc, char* argv[]) {
         res.set_content("OK", "text/plain");
     });
 
-    // 3. DELETE (Update Map + Log to Disk)
+    // 3. DELETE
     svr.Post("/del", [](const httplib::Request& req, httplib::Response& res) {
         string key = req.get_param_value("key");
         int id = get_shard_id(key);
@@ -89,7 +106,7 @@ int main(int argc, char* argv[]) {
         res.set_content("OK", "text/plain");
     });
 
-    // 4. READ (In-Memory Only)
+    // 4. READ
     svr.Get("/get", [](const httplib::Request& req, httplib::Response& res) {
         string key = req.get_param_value("key");
         int id = get_shard_id(key);
@@ -98,16 +115,19 @@ int main(int argc, char* argv[]) {
         else { res.status = 404; res.set_content("Not Found", "text/plain"); }
     });
 
-    // 5. MIGRATION HELPERS (Keep these for the Proxy to use)
+    // 5. MIGRATION HELPERS (THE FIX IS HERE)
     svr.Get("/range", [](const httplib::Request& req, httplib::Response& res) {
         size_t start = stoull(req.get_param_value("start"));
         size_t end = stoull(req.get_param_value("end"));
         stringstream ss;
+
         for (int i = 0; i < NUM_SHARDS; ++i) {
             lock_guard<mutex> lock(shard_mutexes[i]);
             for (const auto& pair : db_shards[i]) {
-                if (in_range(hash<string>{}(pair.first), start, end))
+                // *** FIX: Use fnv1a_hash() instead of hash<string>{} ***
+                if (in_range(fnv1a_hash(pair.first), start, end)) {
                     ss << pair.first << "\n" << pair.second << "\n";
+                }
             }
         }
         res.set_content(ss.str(), "text/plain");
@@ -118,6 +138,7 @@ int main(int argc, char* argv[]) {
         res.set_content("OK", "text/plain");
     });
 
+    // 7. Debug Dump
     svr.Get("/all", [](const httplib::Request& req, httplib::Response& res) {
         stringstream ss;
         for (int i = 0; i < NUM_SHARDS; ++i) {
@@ -125,6 +146,19 @@ int main(int argc, char* argv[]) {
             for (const auto& pair : db_shards[i]) ss << pair.first << "\n" << pair.second << "\n";
         }
         res.set_content(ss.str(), "text/plain");
+    });
+
+    // 8. Reset
+    svr.Post("/reset", [&](const httplib::Request&, httplib::Response& res) {
+        for (int i = 0; i < NUM_SHARDS; ++i) {
+            lock_guard<mutex> lock(shard_mutexes[i]);
+            db_shards[i].clear();
+        }
+        wal_file.close();
+        string filename = "wal_" + to_string(port) + ".log";
+        std::remove(filename.c_str());
+        wal_file.open(filename, ios::app);
+        res.set_content("Database Reset", "text/plain");
     });
 
     cout << "--- Persistent Server Port " << port << " (WAL: " << wal_filename << ") ---" << endl;
