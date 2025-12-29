@@ -16,7 +16,6 @@ private:
     size_t hash_key(const std::string& key);
 
 public:
-    // CHANGED DEFAULT FROM 100 TO 200
     ConsistentHashRing(int v_nodes = 200);
     void addNode(const std::string& node_address);
     void removeNode(const std::string& node_address);

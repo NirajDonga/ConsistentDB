@@ -96,7 +96,10 @@ int main(int argc, char* argv[]) {
         string val = req.get_param_value("val");
         int id = get_shard_id(key);
 
-        { lock_guard<mutex> lock(shard_mutexes[id]); db_shards[id][key] = val; }
+        {
+            lock_guard<mutex> lock(shard_mutexes[id]);
+            db_shards[id][key] = val;
+        }
         log_op("SET", key, val);
 
         // LOG ENABLED: Shows when a key joins this server
@@ -109,7 +112,10 @@ int main(int argc, char* argv[]) {
         string key = req.get_param_value("key");
         int id = get_shard_id(key);
 
-        { lock_guard<mutex> lock(shard_mutexes[id]); db_shards[id].erase(key); }
+        {
+            lock_guard<mutex> lock(shard_mutexes[id]);
+            db_shards[id].erase(key);
+        }
         log_op("DEL", key);
 
         // LOG ENABLED: Shows when a key leaves this server
