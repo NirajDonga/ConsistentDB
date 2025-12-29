@@ -77,9 +77,11 @@ void rebalance_remove(ConsistentHashRing& ring, const std::string& node_to_remov
 
     httplib::Client victim_cli(ip, port);
     victim_cli.set_connection_timeout(1);
+
+    // 1. GET ALL DATA before removing from ring
     auto res = victim_cli.Get("/all");
 
-    // Remove from ring immediately so new lookups don't go there
+    // 2. Remove from ring so new traffic goes to the new owners
     ring.removeNode(node_to_remove);
 
     int moved_count = 0;
@@ -88,19 +90,27 @@ void rebalance_remove(ConsistentHashRing& ring, const std::string& node_to_remov
         std::string key, val;
         while (std::getline(ss, key)) {
             if (std::getline(ss, val)) {
-                // Find NEW owner for this key
+                // Find who owns this key now
                 std::string target = ring.getNode(key);
                 std::string t_ip; int t_port;
                 if (get_ip_port(target, t_ip, t_port)) {
                     httplib::Client dest(t_ip, t_port);
                     httplib::Params p; p.emplace("key", key); p.emplace("val", val);
+
+                    // 3. Send data to new owner
                     if (dest.Post("/put", p)) {
-                        // We don't delete from victim because it's being removed anyway
                         moved_count++;
+                        // Note: We don't need to DEL individually anymore...
                     }
                 }
             }
         }
+
+        // 4. THE CLEANUP: Reset the old node completely.
+        // This clears its memory AND deletes the wal_PORT.log file.
+        // The node is now fresh and ready to be used by someone else.
+        victim_cli.Post("/reset");
+        std::cout << "[Proxy] Node " << node_to_remove << " has been RESET (Data cleared, Log deleted).\n";
     }
     std::cout << "[Proxy] Evacuation Complete. Moved " << moved_count << " keys.\n";
 }

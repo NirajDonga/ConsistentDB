@@ -20,36 +20,37 @@ mutex wal_mutex;
 
 // --- HASHING HELPERS ---
 
-// 1. Internal Sharding Hash (Keeps local locking fast)
+// 1. Internal Sharding Hash
 size_t get_shard_id(const string& key) {
     return hash<string>{}(key) % NUM_SHARDS;
 }
 
-// 2. FNV-1a Hash (CRITICAL FIX: Matches Proxy's Logic)
-size_t fnv1a_hash(const std::string& key) {
+// 2. Strong Hash (MUST MATCH PROXY)
+size_t consistent_hash(const std::string& key) {
     const size_t FNV_prime = 1099511628211u;
     const size_t offset_basis = 14695981039346656037u;
+
     size_t hash = offset_basis;
     for (char c : key) {
         hash ^= static_cast<size_t>(c);
         hash *= FNV_prime;
     }
+
+    // Mixer to prevent "a, b, c" clustering
+    hash ^= hash >> 33;
+    hash *= 0xff51afd7ed558ccd;
+    hash ^= hash >> 33;
+    hash *= 0xc4ceb9fe1a85ec53;
+    hash ^= hash >> 33;
+
     return hash;
 }
 
 // 3. Ring Range Check
-// [Replace the existing in_range function with this]
 bool in_range(size_t h, size_t start, size_t end) {
-    // CRITICAL FIX: If start == end, the range is empty. Return false immediately.
-    // This prevents the "Move All" bug.
-    if (start == end) return false;
-
-    if (start < end) {
-        return h > start && h <= end;
-    } else {
-        // Wrap-around case
-        return h > start || h <= end;
-    }
+    if (start == end) return false; // Safety
+    if (start < end) return h > start && h <= end;
+    return h > start || h <= end;   // Wrap-around
 }
 
 // --- PERSISTENCE HELPERS ---
@@ -98,6 +99,7 @@ int main(int argc, char* argv[]) {
         { lock_guard<mutex> lock(shard_mutexes[id]); db_shards[id][key] = val; }
         log_op("SET", key, val);
 
+        // LOG ENABLED: Shows when a key joins this server
         cout << "\033[1;32m[Saved] " << key << "\033[0m" << endl;
         res.set_content("OK", "text/plain");
     });
@@ -110,6 +112,7 @@ int main(int argc, char* argv[]) {
         { lock_guard<mutex> lock(shard_mutexes[id]); db_shards[id].erase(key); }
         log_op("DEL", key);
 
+        // LOG ENABLED: Shows when a key leaves this server
         cout << "\033[1;31m[Deleted] " << key << "\033[0m" << endl;
         res.set_content("OK", "text/plain");
     });
@@ -123,30 +126,36 @@ int main(int argc, char* argv[]) {
         else { res.status = 404; res.set_content("Not Found", "text/plain"); }
     });
 
-    // 5. MIGRATION HELPERS (THE FIX IS HERE)
+    // 5. MIGRATION HELPERS
     svr.Get("/range", [](const httplib::Request& req, httplib::Response& res) {
         size_t start = stoull(req.get_param_value("start"));
         size_t end = stoull(req.get_param_value("end"));
         stringstream ss;
+        int count = 0;
 
         for (int i = 0; i < NUM_SHARDS; ++i) {
             lock_guard<mutex> lock(shard_mutexes[i]);
             for (const auto& pair : db_shards[i]) {
-                // *** FIX: Use fnv1a_hash() instead of hash<string>{} ***
-                if (in_range(fnv1a_hash(pair.first), start, end)) {
+                if (in_range(consistent_hash(pair.first), start, end)) {
                     ss << pair.first << "\n" << pair.second << "\n";
+                    count++;
                 }
             }
+        }
+
+        // Log summary of keys leaving this server
+        if (count > 0) {
+            cout << "[Migration] Sending " << count << " keys for range " << start << ".." << end << endl;
         }
         res.set_content(ss.str(), "text/plain");
     });
 
-    // 6. Heartbeat / Status
+    // 6. STATUS
     svr.Get("/status", [](const httplib::Request&, httplib::Response& res) {
         res.set_content("OK", "text/plain");
     });
 
-    // 7. Debug Dump
+    // 7. DUMP
     svr.Get("/all", [](const httplib::Request& req, httplib::Response& res) {
         stringstream ss;
         for (int i = 0; i < NUM_SHARDS; ++i) {
@@ -156,7 +165,7 @@ int main(int argc, char* argv[]) {
         res.set_content(ss.str(), "text/plain");
     });
 
-    // 8. Reset
+    // 8. RESET
     svr.Post("/reset", [&](const httplib::Request&, httplib::Response& res) {
         for (int i = 0; i < NUM_SHARDS; ++i) {
             lock_guard<mutex> lock(shard_mutexes[i]);
@@ -169,6 +178,6 @@ int main(int argc, char* argv[]) {
         res.set_content("Database Reset", "text/plain");
     });
 
-    cout << "--- Persistent Server Port " << port << " (WAL: " << wal_filename << ") ---" << endl;
+    cout << "--- Persistent Server Port " << port << " ---" << endl;
     svr.listen("0.0.0.0", port);
 }

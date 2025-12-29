@@ -7,13 +7,25 @@
 ConsistentHashRing::ConsistentHashRing(int v_nodes) : virtual_nodes(v_nodes) {}
 
 size_t ConsistentHashRing::hash_key(const std::string& key) {
+    // 1. FNV-1a 64-bit Base
     const size_t FNV_prime = 1099511628211u;
     const size_t offset_basis = 14695981039346656037u;
+
     size_t hash = offset_basis;
     for (char c : key) {
         hash ^= static_cast<size_t>(c);
         hash *= FNV_prime;
     }
+
+    // 2. MURMUR3 AVALANCHE MIXER (The Fix)
+    // This forces short keys (like 'a', 'b') to scatter across the ring
+    // instead of clustering in one spot.
+    hash ^= hash >> 33;
+    hash *= 0xff51afd7ed558ccd;
+    hash ^= hash >> 33;
+    hash *= 0xc4ceb9fe1a85ec53;
+    hash ^= hash >> 33;
+
     return hash;
 }
 
@@ -43,13 +55,13 @@ std::string ConsistentHashRing::getNode(const std::string& key) {
     return it->second;
 }
 
-// [Replace the getRebalancingTasks function in src/common/hash_ring.cpp]
 std::vector<MigrationTask> ConsistentHashRing::getRebalancingTasks(const std::string& new_node) {
     std::vector<MigrationTask> tasks;
     if (ring.empty()) return tasks;
 
+    std::cout << "[Ring] Calculating rebalancing tasks for " << new_node << "...\n";
+
     for (auto it = ring.begin(); it != ring.end(); ++it) {
-        // We only care about ranges effectively owned by the NEW node
         if (it->second == new_node) {
             size_t end_hash = it->first;
             size_t start_hash;
@@ -61,18 +73,18 @@ std::vector<MigrationTask> ConsistentHashRing::getRebalancingTasks(const std::st
                 start_hash = std::prev(it)->first;
             }
 
-            // SAFETY CHECK: Skip empty ranges to prevent "Move All" bug
+            // SAFETY: Skip zero-length ranges
             if (start_hash == end_hash) continue;
 
-            // Find the true victim (the first node following us that ISN'T us)
+            // Find victim
             auto successor_it = std::next(it);
             while (true) {
                 if (successor_it == ring.end()) successor_it = ring.begin();
                 if (successor_it->second != new_node) break;
-                // Stop infinite loop if ring only has the new node
                 if (successor_it == it) break;
                 successor_it++;
             }
+
             std::string real_victim = successor_it->second;
 
             if (real_victim != new_node) {
