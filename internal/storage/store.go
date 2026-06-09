@@ -16,6 +16,8 @@ func NewStore() *Store {
 	}
 }
 
+var ErrKeyNotFound = errors.New("key not found")
+
 func (s *Store) Get(key string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -24,7 +26,7 @@ func (s *Store) Get(key string) (string, error) {
 	if ok {
 		return value, nil
 	}
-	return "", errors.New("Key Not Found")
+	return "", ErrKeyNotFound
 }
 
 func (s *Store) Set(key string, value string) {
@@ -39,7 +41,7 @@ func (s *Store) Delete(key string) error {
 	defer s.mu.Unlock()
 
 	if _, exists := s.data[key]; !exists {
-		return errors.New("Key Dont Exist")
+		return ErrKeyNotFound
 	}
 	delete(s.data, key)
 	return nil
