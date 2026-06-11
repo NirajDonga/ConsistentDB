@@ -69,6 +69,7 @@ type GetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	Found         bool                   `protobuf:"varint,2,opt,name=found,proto3" json:"found,omitempty"`
+	RedirectAddr  string                 `protobuf:"bytes,3,opt,name=redirect_addr,json=redirectAddr,proto3" json:"redirect_addr,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -115,6 +116,13 @@ func (x *GetResponse) GetFound() bool {
 		return x.Found
 	}
 	return false
+}
+
+func (x *GetResponse) GetRedirectAddr() string {
+	if x != nil {
+		return x.RedirectAddr
+	}
+	return ""
 }
 
 type SetRequest struct {
@@ -172,6 +180,7 @@ func (x *SetRequest) GetValue() string {
 type SetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	RedirectAddr  string                 `protobuf:"bytes,2,opt,name=redirect_addr,json=redirectAddr,proto3" json:"redirect_addr,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -211,6 +220,13 @@ func (x *SetResponse) GetOk() bool {
 		return x.Ok
 	}
 	return false
+}
+
+func (x *SetResponse) GetRedirectAddr() string {
+	if x != nil {
+		return x.RedirectAddr
+	}
+	return ""
 }
 
 type DeleteRequest struct {
@@ -260,6 +276,7 @@ func (x *DeleteRequest) GetKey() string {
 type DeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Deleted       bool                   `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	RedirectAddr  string                 `protobuf:"bytes,2,opt,name=redirect_addr,json=redirectAddr,proto3" json:"redirect_addr,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -301,6 +318,13 @@ func (x *DeleteResponse) GetDeleted() bool {
 	return false
 }
 
+func (x *DeleteResponse) GetRedirectAddr() string {
+	if x != nil {
+		return x.RedirectAddr
+	}
+	return ""
+}
+
 var File_proto_kv_proto protoreflect.FileDescriptor
 
 const file_proto_kv_proto_rawDesc = "" +
@@ -308,20 +332,23 @@ const file_proto_kv_proto_rawDesc = "" +
 	"\x0eproto/kv.proto\x12\x02kv\"\x1e\n" +
 	"\n" +
 	"GetRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"9\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"^\n" +
 	"\vGetResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
-	"\x05found\x18\x02 \x01(\bR\x05found\"4\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\x12#\n" +
+	"\rredirect_addr\x18\x03 \x01(\tR\fredirectAddr\"4\n" +
 	"\n" +
 	"SetRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\x1d\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"B\n" +
 	"\vSetResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok\"!\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12#\n" +
+	"\rredirect_addr\x18\x02 \x01(\tR\fredirectAddr\"!\n" +
 	"\rDeleteRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"*\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"O\n" +
 	"\x0eDeleteResponse\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\bR\adeleted2\x85\x01\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\x12#\n" +
+	"\rredirect_addr\x18\x02 \x01(\tR\fredirectAddr2\x85\x01\n" +
 	"\x02KV\x12&\n" +
 	"\x03Get\x12\x0e.kv.GetRequest\x1a\x0f.kv.GetResponse\x12&\n" +
 	"\x03Set\x12\x0e.kv.SetRequest\x1a\x0f.kv.SetResponse\x12/\n" +

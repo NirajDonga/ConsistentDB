@@ -107,6 +107,23 @@ func (a *App) handleGet(args []string) {
 		fmt.Printf("get failed: %v\n", err)
 		return
 	}
+
+	if res.RedirectAddr != "" {
+		conn, err := grpc.NewClient(res.RedirectAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			fmt.Printf("failed to connect to redirected address %s: %v\n", res.RedirectAddr, err)
+			return
+		}
+		defer conn.Close()
+
+		client := kvpb.NewKVClient(conn)
+		res, err = client.Get(ctx, &kvpb.GetRequest{Key: args[1]})
+		if err != nil {
+			fmt.Printf("get failed: %v\n", err)
+			return
+		}
+	}
+
 	if !res.Found {
 		fmt.Println("key not found")
 		return
@@ -123,9 +140,30 @@ func (a *App) handleSet(args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := a.client.Set(ctx, &kvpb.SetRequest{Key: args[1], Value: args[2]})
+	res, err := a.client.Set(ctx, &kvpb.SetRequest{Key: args[1], Value: args[2]})
 	if err != nil {
 		fmt.Printf("set failed: %v\n", err)
+		return
+	}
+
+	if res.RedirectAddr != "" {
+		conn, err := grpc.NewClient(res.RedirectAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			fmt.Printf("failed to connect to redirected address %s: %v\n", res.RedirectAddr, err)
+			return
+		}
+		defer conn.Close()
+
+		client := kvpb.NewKVClient(conn)
+		res, err = client.Set(ctx, &kvpb.SetRequest{Key: args[1], Value: args[2]})
+		if err != nil {
+			fmt.Printf("set failed: %v\n", err)
+			return
+		}
+	}
+
+	if !res.Ok {
+		fmt.Println("failed to set key")
 		return
 	}
 	fmt.Println("OK")
@@ -145,6 +183,23 @@ func (a *App) handleDelete(args []string) {
 		fmt.Printf("delete failed: %v\n", err)
 		return
 	}
+
+	if res.RedirectAddr != "" {
+		conn, err := grpc.NewClient(res.RedirectAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			fmt.Printf("failed to connect to redirected address %s: %v\n", res.RedirectAddr, err)
+			return
+		}
+		defer conn.Close()
+
+		client := kvpb.NewKVClient(conn)
+		res, err = client.Delete(ctx, &kvpb.DeleteRequest{Key: args[1]})
+		if err != nil {
+			fmt.Printf("delete failed: %v\n", err)
+			return
+		}
+	}
+
 	if !res.Deleted {
 		fmt.Println("key not found")
 		return

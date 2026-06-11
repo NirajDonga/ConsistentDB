@@ -17,6 +17,7 @@ message GetRequest {
 message GetResponse {
   string value = 1;
   bool found = 2;
+  string redirect_addr = 3;
 }
 
 message SetRequest {
@@ -26,6 +27,7 @@ message SetRequest {
 
 message SetResponse {
   bool ok = 1;
+  string redirect_addr = 2;
 }
 
 message DeleteRequest {
@@ -34,4 +36,5 @@ message DeleteRequest {
 
 message DeleteResponse {
   bool deleted = 1;
+  string redirect_addr = 2;
 }
