@@ -3,7 +3,6 @@ package main
 import (
 	"kv_store/gen/kvpb"
 	"kv_store/internal/controller"
-	"kv_store/internal/ring"
 	"kv_store/internal/storage"
 	"log"
 	"net"
@@ -12,14 +11,9 @@ import (
 )
 
 func main() {
-	r, err := ring.NewRing(50)
-	if err != nil {
-		log.Fatalf("failed to initialize ring: %v", err)
-	}
-	r.AddNode("localhost:50051")
-
 	store := storage.NewStore()
-	server := controller.NewServer(store, r, "localhost:50051")
+
+	server := controller.NewServer(store)
 
 	listener, err := net.Listen("tcp", ":50051")
 	if err != nil {
