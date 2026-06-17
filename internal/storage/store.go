@@ -2,27 +2,52 @@ package storage
 
 import (
 	"errors"
+	"hash/fnv"
 	"sync"
 )
 
-type Store struct {
+const shardCount = 32
+
+type Shard struct {
 	data map[string]string
 	mu   sync.RWMutex
 }
 
+type Store struct {
+	shards []*Shard
+}
+
 func NewStore() *Store {
-	return &Store{
-		data: make(map[string]string),
+	store := &Store{
+		shards: make([]*Shard, shardCount),
 	}
+
+	for i := 0; i < shardCount; i++ {
+		store.shards[i] = &Shard{
+			data: make(map[string]string),
+		}
+	}
+	return store
+}
+
+func getShardIndex(key string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(key))
+	return h.Sum32() % shardCount
+}
+func (s *Store) getShard(key string) *Shard {
+	return s.shards[getShardIndex(key)]
 }
 
 var ErrKeyNotFound = errors.New("key not found")
 
 func (s *Store) Get(key string) (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	shard := s.getShard(key)
 
-	value, ok := s.data[key]
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	value, ok := shard.data[key]
 	if ok {
 		return value, nil
 	}
@@ -30,19 +55,25 @@ func (s *Store) Get(key string) (string, error) {
 }
 
 func (s *Store) Set(key string, value string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
-	s.data[key] = value
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	shard.data[key] = value
 }
 
 func (s *Store) Delete(key string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
-	if _, exists := s.data[key]; !exists {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, exists := shard.data[key]; !exists {
 		return ErrKeyNotFound
 	}
-	delete(s.data, key)
+	delete(shard.data, key)
 	return nil
 }
