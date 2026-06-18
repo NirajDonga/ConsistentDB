@@ -1,16 +1,26 @@
 package storage
 
 import (
-	"errors"
 	"hash/fnv"
 	"sync"
 )
 
 const shardCount = 32
+const shardMaxSize = 1000
+
+type Node struct {
+	key   string
+	value string
+	prev  *Node
+	next  *Node
+}
 
 type Shard struct {
-	data map[string]string
-	mu   sync.RWMutex
+	data     map[string]*Node
+	mu       sync.RWMutex
+	head     *Node
+	tail     *Node
+	capacity int
 }
 
 type Store struct {
@@ -24,34 +34,32 @@ func NewStore() *Store {
 
 	for i := 0; i < shardCount; i++ {
 		store.shards[i] = &Shard{
-			data: make(map[string]string),
+			data:     make(map[string]*Node),
+			capacity: shardMaxSize,
 		}
 	}
 	return store
 }
 
-func getShardIndex(key string) uint32 {
-	h := fnv.New32a()
-	h.Write([]byte(key))
-	return h.Sum32() % shardCount
-}
 func (s *Store) getShard(key string) *Shard {
-	return s.shards[getShardIndex(key)]
+	hasher := fnv.New32a()
+	hasher.Write([]byte(key))
+	shardIndex := hasher.Sum32() % uint32(shardCount)
+	return s.shards[shardIndex]
 }
 
-var ErrKeyNotFound = errors.New("key not found")
-
-func (s *Store) Get(key string) (string, error) {
+func (s *Store) Get(key string) (string, bool) {
 	shard := s.getShard(key)
 
-	shard.mu.RLock()
-	defer shard.mu.RUnlock()
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
-	value, ok := shard.data[key]
+	node, ok := shard.data[key]
 	if ok {
-		return value, nil
+		shard.moveToFront(node)
+		return node.value, true
 	}
-	return "", ErrKeyNotFound
+	return "", false
 }
 
 func (s *Store) Set(key string, value string) {
@@ -61,19 +69,73 @@ func (s *Store) Set(key string, value string) {
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
-	shard.data[key] = value
+	node, ok := shard.data[key]
+	if ok {
+		node.value = value
+		shard.moveToFront(node)
+		return
+	}
+
+	if shard.capacity == len(shard.data) {
+		delete(shard.data, shard.tail.key)
+		shard.removeNode(shard.tail)
+	}
+
+	node = &Node{
+		key:   key,
+		value: value,
+	}
+
+	shard.addNode(node)
+	shard.data[key] = node
 }
 
-func (s *Store) Delete(key string) error {
+func (s *Store) Delete(key string) bool {
 
 	shard := s.getShard(key)
 
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
-	if _, exists := shard.data[key]; !exists {
-		return ErrKeyNotFound
+	if node, exists := shard.data[key]; exists {
+		shard.removeNode(node)
+		delete(shard.data, key)
+		return true
 	}
-	delete(shard.data, key)
-	return nil
+	return false
+}
+
+func (s *Shard) addNode(node *Node) {
+	if s.head == nil {
+		s.head = node
+		s.tail = node
+	} else {
+		s.head.next = node
+		node.prev = s.head
+		s.head = node
+	}
+}
+
+func (s *Shard) removeNode(node *Node) {
+	if s.head == s.tail {
+		s.head = nil
+		s.tail = nil
+	} else if s.head == node {
+		s.head = node.prev
+		s.head.next = nil
+	} else if s.tail == node {
+		s.tail = s.tail.next
+		s.tail.prev = nil
+	} else {
+		node.prev.next = node.next
+		node.next.prev = node.prev
+	}
+}
+
+func (s *Shard) moveToFront(node *Node) {
+	if s.head == node {
+		return
+	}
+	s.removeNode(node)
+	s.addNode(node)
 }

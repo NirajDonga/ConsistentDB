@@ -19,14 +19,10 @@ func NewServer(store *storage.Store) *Server {
 }
 
 func (s *Server) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResponse, error) {
-	value, err := s.store.Get(req.Key)
+	value, ok := s.store.Get(req.Key)
 
-	if errors.Is(err, storage.ErrKeyNotFound) {
-		return &kvpb.GetResponse{Found: false}, nil
-	}
-
-	if err != nil {
-		return nil, err
+	if !ok {
+		return nil, errors.New("Key Not Found")
 	}
 
 	return &kvpb.GetResponse{
@@ -41,14 +37,10 @@ func (s *Server) Set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.SetRespon
 }
 
 func (s *Server) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.DeleteResponse, error) {
-	err := s.store.Delete(req.Key)
+	ok := s.store.Delete(req.Key)
 
-	if errors.Is(err, storage.ErrKeyNotFound) {
-		return &kvpb.DeleteResponse{Deleted: false}, nil
-	}
-
-	if err != nil {
-		return nil, err
+	if !ok {
+		return nil, errors.New("Server error")
 	}
 
 	return &kvpb.DeleteResponse{Deleted: true}, nil
