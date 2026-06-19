@@ -13,7 +13,19 @@ import (
 func main() {
 	store := storage.NewStore()
 
-	server := controller.NewServer(store)
+	log.Println("Replaying Write-Ahead Log...")
+	if err := storage.Replay("data.wal", store); err != nil {
+		log.Fatalf("Failed to replay WAL: %v", err)
+	}
+	log.Println("WAL replay complete!")
+
+	wal, err := storage.NewWal("data.wal")
+	if err != nil {
+		log.Fatalf("Failed to open WAL: %v", err)
+	}
+	defer wal.Close()
+
+	server := controller.NewServer(store, wal)
 
 	listener, err := net.Listen("tcp", ":50051")
 	if err != nil {
