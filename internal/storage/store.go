@@ -3,16 +3,19 @@ package storage
 import (
 	"hash/fnv"
 	"sync"
+	"time"
 )
 
 const shardCount = 32
 const shardMaxSize = 1000
+const defaultTTLSeconds = 60
 
 type Node struct {
-	key   string
-	value string
-	prev  *Node
-	next  *Node
+	key       string
+	value     string
+	expiresAt int64
+	prev      *Node
+	next      *Node
 }
 
 type Shard struct {
@@ -56,6 +59,11 @@ func (s *Store) Get(key string) (string, bool) {
 
 	node, ok := shard.data[key]
 	if ok {
+		if time.Now().Unix() > node.expiresAt {
+			shard.removeNode(node)
+			delete(shard.data, key)
+			return "", false
+		}
 		shard.moveToFront(node)
 		return node.value, true
 	}
@@ -82,8 +90,9 @@ func (s *Store) Set(key string, value string) {
 	}
 
 	node = &Node{
-		key:   key,
-		value: value,
+		key:       key,
+		value:     value,
+		expiresAt: time.Now().Unix() + defaultTTLSeconds,
 	}
 
 	shard.addNode(node)
